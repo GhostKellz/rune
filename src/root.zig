@@ -1,23 +1,27 @@
-//! By convention, root.zig is the root source file when making a library.
+//! Rune - Premier Zig library for Model Context Protocol (MCP)
 const std = @import("std");
 
-pub fn bufferedPrint() !void {
-    // Stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
+// Core MCP types and structures
+pub const protocol = @import("protocol.zig");
+pub const transport = @import("transport.zig");
+pub const client = @import("client.zig");
+pub const server = @import("server.zig");
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+// Re-export main types
+pub const Client = client.Client;
+pub const Server = server.Server;
+pub const ToolCtx = server.ToolCtx;
 
-    try stdout.flush(); // Don't forget to flush!
-}
+// MCP Protocol Messages
+pub const JsonRpcMessage = protocol.JsonRpcMessage;
+pub const Request = protocol.Request;
+pub const Response = protocol.Response;
+pub const Notification = protocol.Notification;
 
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
+// Transport types
+pub const Transport = transport.Transport;
+pub const TransportType = transport.TransportType;
 
-test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+test {
+    std.testing.refAllDecls(@This());
 }

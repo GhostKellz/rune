@@ -2,9 +2,8 @@ const std = @import("std");
 const rune = @import("rune");
 
 pub fn main() !void {
-    // Prints to stderr, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try rune.bufferedPrint();
+    std.debug.print("Rune MCP Library v0.1.0\n", .{});
+    std.debug.print("Run `zig build test` to run the tests.\n", .{});
 }
 
 test "simple test" {
