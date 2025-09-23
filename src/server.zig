@@ -8,7 +8,7 @@ pub const ToolCtx = struct {
     alloc: std.mem.Allocator,
     request_id: protocol.RequestId,
     guard: *SecurityGuard,
-    fs: std.fs.File,
+    fs: std.fs.Dir,
 
     pub fn init(allocator: std.mem.Allocator, request_id: protocol.RequestId) ToolCtx {
         return ToolCtx{
@@ -78,7 +78,7 @@ pub const Server = struct {
 
     /// Register a tool handler
     pub fn registerTool(self: *Self, name: []const u8, handler: ToolHandler) !void {
-        try self.tools.append(.{
+        try self.tools.append(self.allocator, .{
             .name = name,
             .handler = handler,
         });

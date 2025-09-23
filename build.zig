@@ -41,6 +41,27 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // FFI Static Library for Rust integration
+    const lib = b.addLibrary(.{
+        .name = "rune",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/ffi.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .linkage = .static,
+    });
+
+    // Link system libraries for FFI
+    lib.linkLibC();
+
+    // Install the static library
+    b.installArtifact(lib);
+
+    // Install header file for C/Rust FFI
+    const header_install = b.addInstallFile(b.path("include/rune.h"), "rune.h");
+    b.getInstallStep().dependOn(&header_install.step);
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
