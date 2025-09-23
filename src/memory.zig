@@ -41,8 +41,7 @@ pub const MemoryStats = struct {
     pub fn format(self: MemoryStats, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         _ = fmt;
         _ = options;
-        try writer.print("MemoryStats{{ allocated: {} bytes, freed: {} bytes, current: {} bytes, peak: {} bytes, allocs: {}, deallocs: {} }}",
-            .{ self.total_allocated, self.total_freed, self.current_usage, self.peak_usage, self.allocation_count, self.deallocation_count });
+        try writer.print("MemoryStats{{ allocated: {} bytes, freed: {} bytes, current: {} bytes, peak: {} bytes, allocs: {}, deallocs: {} }}", .{ self.total_allocated, self.total_freed, self.current_usage, self.peak_usage, self.allocation_count, self.deallocation_count });
     }
 };
 

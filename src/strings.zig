@@ -440,8 +440,8 @@ pub fn levenshteinDistance(a: []const u8, b: []const u8) !usize {
         while (j <= b.len) : (j += 1) {
             const cost: usize = if (a[i - 1] == b[j - 1]) 0 else 1;
             matrix[i][j] = @min(
-                matrix[i - 1][j] + 1,      // deletion
-                matrix[i][j - 1] + 1,      // insertion
+                matrix[i - 1][j] + 1, // deletion
+                matrix[i][j - 1] + 1, // insertion
                 matrix[i - 1][j - 1] + cost, // substitution
             );
         }
@@ -467,7 +467,7 @@ test "UTF-8 validation" {
     try std.testing.expect(validateUtf8("hello"));
     try std.testing.expect(validateUtf8("héllo"));
     try std.testing.expect(validateUtf8("🚀 rocket"));
-    try std.testing.expect(!validateUtf8(&[_]u8{ 0x80 })); // Invalid start byte
+    try std.testing.expect(!validateUtf8(&[_]u8{0x80})); // Invalid start byte
 }
 
 test "LineIndex basic functionality" {

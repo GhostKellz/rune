@@ -65,9 +65,9 @@ pub const Range = struct {
 /// Selection mode
 pub const SelectionMode = enum {
     character, // Character-by-character selection
-    word,      // Word-based selection
-    line,      // Line-based selection
-    block,     // Rectangular block selection
+    word, // Word-based selection
+    line, // Line-based selection
+    block, // Rectangular block selection
 };
 
 /// Text selection with mode and anchor

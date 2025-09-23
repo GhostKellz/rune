@@ -218,12 +218,12 @@ pub const ParallelFileSearcher = struct {
 
             while (line_start < content.len) {
                 const line_end = mem.indexOfScalar(u8, content[line_start..], '\n') orelse content.len - line_start;
-                const line = content[line_start..line_start + line_end];
+                const line = content[line_start .. line_start + line_end];
 
                 // Search within line
                 var pos: usize = 0;
                 while (self.bm.search(line[pos..])) |match_offset| {
-                    const match_text = line[pos + match_offset..pos + match_offset + self.bm.pattern.len];
+                    const match_text = line[pos + match_offset .. pos + match_offset + self.bm.pattern.len];
 
                     const result = SearchResult{
                         .file_path = self.allocator.dupe(u8, self.file.path) catch continue,
@@ -273,7 +273,7 @@ pub const SymbolKind = enum {
     method,
     field,
     constant,
-    @"type",
+    type,
     module,
     other,
 };
@@ -425,11 +425,12 @@ pub const SymbolIndex = struct {
 
     fn extractSymbolName(line: []const u8, keyword: []const u8) ![]const u8 {
         const start = mem.indexOf(u8, line, keyword) orelse return "";
-        const after_keyword = line[start + keyword.len..];
+        const after_keyword = line[start + keyword.len ..];
 
         var name_end: usize = 0;
         while (name_end < after_keyword.len and
-               (std.ascii.isAlphanumeric(after_keyword[name_end]) or after_keyword[name_end] == '_')) {
+            (std.ascii.isAlphanumeric(after_keyword[name_end]) or after_keyword[name_end] == '_'))
+        {
             name_end += 1;
         }
 

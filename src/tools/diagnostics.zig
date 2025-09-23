@@ -550,7 +550,8 @@ pub const PerformanceProfiler = struct {
 
             // Large allocations in loops
             if (mem.indexOf(u8, line, "for") != null and
-                (mem.indexOf(u8, line, "alloc") != null or mem.indexOf(u8, line, "ArrayList") != null)) {
+                (mem.indexOf(u8, line, "alloc") != null or mem.indexOf(u8, line, "ArrayList") != null))
+            {
                 const diagnostic = Diagnostic.init(
                     self.allocator,
                     "Potential allocation in loop - consider moving outside loop",

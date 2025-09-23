@@ -58,7 +58,7 @@ pub const RingBuffer = struct {
         if (to_write == 0) return 0;
 
         const first_chunk = @min(to_write, self.buffer.len - self.write_pos);
-        @memcpy(self.buffer[self.write_pos..self.write_pos + first_chunk], data[0..first_chunk]);
+        @memcpy(self.buffer[self.write_pos .. self.write_pos + first_chunk], data[0..first_chunk]);
 
         if (first_chunk < to_write) {
             const second_chunk = to_write - first_chunk;
@@ -79,7 +79,7 @@ pub const RingBuffer = struct {
         if (to_read == 0) return 0;
 
         const first_chunk = @min(to_read, self.buffer.len - self.read_pos);
-        @memcpy(dest[0..first_chunk], self.buffer[self.read_pos..self.read_pos + first_chunk]);
+        @memcpy(dest[0..first_chunk], self.buffer[self.read_pos .. self.read_pos + first_chunk]);
 
         if (first_chunk < to_read) {
             const second_chunk = to_read - first_chunk;
@@ -101,7 +101,7 @@ pub const RingBuffer = struct {
 
         const read_pos = self.read_pos;
         const first_chunk = @min(to_peek, self.buffer.len - read_pos);
-        @memcpy(dest[0..first_chunk], self.buffer[read_pos..read_pos + first_chunk]);
+        @memcpy(dest[0..first_chunk], self.buffer[read_pos .. read_pos + first_chunk]);
 
         if (first_chunk < to_peek) {
             const second_chunk = to_peek - first_chunk;
