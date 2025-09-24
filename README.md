@@ -12,6 +12,14 @@
   [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
 </div>
 
+## DISCLAIMER
+
+⚠️ **EXPERIMENTAL LIBRARY - FOR LAB/PERSONAL USE** ⚠️
+
+This is an experimental library under active development. It is
+intended for research, learning, and personal projects. The API is subject
+to change!
+
 Rune is a **next-generation Zig 0.16-dev** MCP library that empowers your Zig applications to seamlessly integrate with LLM tools and agent runtimes. Built with functional programming principles and a clean, async-first API, Rune is lightweight, zero-bloat, and designed for effortless embedding in editors, CLIs, TUIs, and system daemons.
 
 ## ✨ Features
