@@ -2,35 +2,24 @@
 const std = @import("std");
 const protocol = @import("protocol.zig");
 const transport = @import("transport.zig");
+const security = @import("security.zig");
 
 /// Tool context provided to tool handlers
 pub const ToolCtx = struct {
     alloc: std.mem.Allocator,
     request_id: protocol.RequestId,
-    guard: *SecurityGuard,
+    guard: *security.SecurityGuard,
     fs: std.fs.Dir,
 
-    pub fn init(allocator: std.mem.Allocator, request_id: protocol.RequestId) ToolCtx {
+    pub fn init(allocator: std.mem.Allocator, request_id: protocol.RequestId, guard: *security.SecurityGuard) ToolCtx {
         return ToolCtx{
             .alloc = allocator,
             .request_id = request_id,
-            .guard = &default_guard,
+            .guard = guard,
             .fs = std.fs.cwd(),
         };
     }
 };
-
-/// Security guard for consent and permissions (placeholder)
-pub const SecurityGuard = struct {
-    pub fn require(self: *SecurityGuard, permission: []const u8, args: anytype) !void {
-        _ = self;
-        _ = permission;
-        _ = args;
-        // TODO: Implement actual security checks
-    }
-};
-
-var default_guard = SecurityGuard{};
 
 /// Tool handler function signature
 pub const ToolHandler = *const fn (ctx: *ToolCtx, params: std.json.Value) anyerror!protocol.ToolResult;
@@ -48,6 +37,7 @@ pub const Server = struct {
     transport: transport.Transport,
     tools: std.ArrayList(RegisteredTool),
     server_info: protocol.ServerInfo,
+    security_guard: security.SecurityGuard,
     initialized: bool,
 
     const Self = @This();
@@ -67,12 +57,14 @@ pub const Server = struct {
                 .name = config.name,
                 .version = config.version,
             },
+            .security_guard = security.SecurityGuard.init(allocator),
             .initialized = false,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.tools.deinit(self.allocator);
+        self.security_guard.deinit();
         self.transport.deinit();
     }
 
@@ -251,7 +243,7 @@ pub const Server = struct {
         // Find the tool handler
         for (self.tools.items) |registered_tool| {
             if (std.mem.eql(u8, registered_tool.name, tool_call.name)) {
-                var ctx = ToolCtx.init(self.allocator, request.id);
+                var ctx = ToolCtx.init(self.allocator, request.id, &self.security_guard);
 
                 const result = registered_tool.handler(&ctx, tool_call.arguments orelse .null) catch |err| {
                     const error_response = protocol.Response{

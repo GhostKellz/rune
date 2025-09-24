@@ -3,7 +3,10 @@ const std = @import("std");
 
 // Core MCP types and structures
 pub const protocol = @import("protocol.zig");
+pub const json_rpc = @import("json_rpc.zig");
 pub const transport = @import("transport.zig");
+pub const schema = @import("schema.zig");
+pub const security = @import("security.zig");
 pub const client = @import("client.zig");
 pub const server = @import("server.zig");
 

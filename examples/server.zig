@@ -17,8 +17,8 @@ pub fn readFile(ctx: *rune.ToolCtx, params: std.json.Value) !rune.protocol.ToolR
         else => return error.InvalidParameters,
     };
 
-    // Optional consent check (placeholder)
-    try ctx.guard.require("fs.read", .{});
+    // Security check for file read permission
+    try ctx.guard.require(.fs_read, rune.security.SecurityContext.fileRead(path, "read_file"));
 
     // Read file
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
