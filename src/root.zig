@@ -13,6 +13,9 @@ pub const security = @import("security.zig");
 pub const client = @import("client.zig");
 pub const server = @import("server.zig");
 
+// AI Provider integration
+pub const ai = @import("ai.zig");
+
 // Re-export main types
 pub const Client = client.Client;
 pub const Server = server.Server;

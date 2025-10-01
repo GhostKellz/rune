@@ -38,6 +38,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(client_exe);
 
+    // Ollama test example
+    const ollama_test_exe = b.addExecutable(.{
+        .name = "ollama_test",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ollama_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "rune", .module = rune_dep.module("rune") },
+            },
+        }),
+    });
+    b.installArtifact(ollama_test_exe);
+
     // Run steps
     const run_server = b.step("run-server", "Run the server example");
     const server_run = b.addRunArtifact(server_exe);
@@ -46,4 +60,8 @@ pub fn build(b: *std.Build) void {
     const run_client = b.step("run-client", "Run the client example");
     const client_run = b.addRunArtifact(client_exe);
     run_client.dependOn(&client_run.step);
+
+    const run_ollama = b.step("run-ollama", "Run the Ollama integration test");
+    const ollama_run = b.addRunArtifact(ollama_test_exe);
+    run_ollama.dependOn(&ollama_run.step);
 }
