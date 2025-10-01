@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  ZIG_VERSION: "0.13.0"
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux
+          - os: macos-latest
+            target: aarch64-macos
+          - os: windows-latest
+            target: x86_64-windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Cache Zig
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/zig
+            zig-cache
+          key: ${{ runner.os }}-zig-${{ hashFiles('build.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseFast
+
+      - name: Run Tests
+        run: zig build test
+
+      - name: Build Debug
+        run: zig build
+
+      - name: Run Benchmarks
+        run: zig build-exe src/benchmark.zig && ./benchmark
+        if: runner.os != 'Windows'
+
+      - name: Run Benchmarks (Windows)
+        run: |
+          zig build-exe src/benchmark.zig
+          .\benchmark.exe
+        if: runner.os == 'Windows'
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: rune-${{ matrix.target }}
+          path: |
+            zig-out/bin/
+            zig-out/lib/
+
+  lint:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Check Formatting
+        run: zig fmt --check src/
+
+      - name: Build Documentation
+        run: zig build-obj src/root.zig -femit-docs
+
+  benchmark-comparison:
+    name: Benchmark Comparison
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Checkout Base
+        run: |
+          git checkout ${{ github.base_ref }}
+
+      - name: Run Base Benchmarks
+        run: |
+          zig build-exe src/benchmark.zig -O ReleaseFast
+          ./benchmark > base_benchmarks.txt
+
+      - name: Checkout PR
+        run: |
+          git checkout ${{ github.sha }}
+
+      - name: Run PR Benchmarks
+        run: |
+          zig build-exe src/benchmark.zig -O ReleaseFast
+          ./benchmark > pr_benchmarks.txt
+
+      - name: Compare Benchmarks
+        run: |
+          echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "### Base Branch (${{ github.base_ref }})" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat base_benchmarks.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "### PR Branch" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat pr_benchmarks.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Security Issues
+        run: |
+          # Check for unsafe patterns
+          echo "Checking for unsafe patterns..."
+          ! grep -r "unreachable" src/ || echo "Warning: unreachable code found"
+          ! grep -r "@ptrCast.*@alignCast" src/ || echo "Note: Unsafe casts detected - ensure they're necessary"
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build-and-test, lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Build Release Artifacts
+        run: |
+          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-linux
+          zig build -Doptimize=ReleaseFast -Dtarget=aarch64-linux
+          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows
+          zig build -Doptimize=ReleaseFast -Dtarget=aarch64-macos
+
+      - name: Package Artifacts
+        run: |
+          tar czf rune-linux-x64.tar.gz zig-out/
+          zip -r rune-windows-x64.zip zig-out/

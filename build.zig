@@ -28,6 +28,13 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
+    
+    // Get zsync dependency
+    const zsync = b.dependency("zsync", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    
     const mod = b.addModule("rune", .{
         // The root source file is the "entry point" of this module. Users of
         // this module will only be able to access public declarations contained
@@ -39,6 +46,9 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        .imports = &.{
+            .{ .name = "zsync", .module = zsync.module("zsync") },
+        },
     });
 
     // FFI Static Library for Rust integration
@@ -48,6 +58,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/ffi.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{
+                .{ .name = "rune", .module = mod },
+                .{ .name = "zsync", .module = zsync.module("zsync") },
+            },
         }),
         .linkage = .static,
     });
@@ -162,6 +176,51 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    // Benchmark executable and step
+    const benchmark_exe = b.addExecutable(.{
+        .name = "benchmark",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/simple_benchmark.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const benchmark_cmd = b.addRunArtifact(benchmark_exe);
+    const benchmark_step = b.step("benchmark", "Run performance benchmarks");
+    benchmark_step.dependOn(&benchmark_cmd.step);
+
+    // Documentation step - build docs for the module
+    const docs_obj = b.addObject(.{
+        .name = "docs",
+        .root_module = mod,
+    });
+
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs_obj.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&install_docs.step);
+
+    // Format check step
+    const fmt_check = b.addFmt(.{
+        .paths = &.{"src"},
+        .check = true,
+    });
+
+    const fmt_step = b.step("fmt", "Check code formatting");
+    fmt_step.dependOn(&fmt_check.step);
+
+    // CI step that runs all checks
+    const ci_step = b.step("ci", "Run all CI checks (test, benchmark, fmt, docs)");
+    ci_step.dependOn(test_step);
+    ci_step.dependOn(benchmark_step);
+    ci_step.dependOn(fmt_step);
+    ci_step.dependOn(docs_step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

@@ -3,6 +3,8 @@ const std = @import("std");
 const protocol = @import("protocol.zig");
 const transport = @import("transport.zig");
 const security = @import("security.zig");
+const json_ser = @import("json_serialization.zig");
+const zsync = @import("zsync");
 
 /// Tool context provided to tool handlers
 pub const ToolCtx = struct {
@@ -10,13 +12,15 @@ pub const ToolCtx = struct {
     request_id: protocol.RequestId,
     guard: *security.SecurityGuard,
     fs: std.fs.Dir,
+    io: zsync.Io, // Add async I/O support
 
-    pub fn init(allocator: std.mem.Allocator, request_id: protocol.RequestId, guard: *security.SecurityGuard) ToolCtx {
+    pub fn init(allocator: std.mem.Allocator, request_id: protocol.RequestId, guard: *security.SecurityGuard, io: zsync.Io) ToolCtx {
         return ToolCtx{
             .alloc = allocator,
             .request_id = request_id,
             .guard = guard,
             .fs = std.fs.cwd(),
+            .io = io,
         };
     }
 };
@@ -37,8 +41,12 @@ pub const Server = struct {
     transport: transport.Transport,
     tools: std.ArrayList(RegisteredTool),
     server_info: protocol.ServerInfo,
+    capabilities: protocol.ServerCapabilities,
+    client_capabilities: ?protocol.ClientCapabilities,
     security_guard: security.SecurityGuard,
     initialized: bool,
+    runtime: *zsync.Runtime,
+    io: zsync.Io,
 
     const Self = @This();
 
@@ -46,19 +54,38 @@ pub const Server = struct {
         transport: transport.TransportType = .stdio,
         name: []const u8 = "rune-server",
         version: []const u8 = "0.1.0",
+        execution_model: zsync.ExecutionModel = .auto,
     };
 
     pub fn init(allocator: std.mem.Allocator, config: Config) !Self {
+        // Initialize async runtime
+        const runtime_config = zsync.Config{
+            .execution_model = if (config.execution_model == .auto)
+                zsync.ExecutionModel.detect()
+            else
+                config.execution_model,
+        };
+        
+        const runtime = try zsync.Runtime.init(allocator, runtime_config);
+        const io = runtime.getIo();
+
         return Self{
             .allocator = allocator,
             .transport = try transport.Transport.init(allocator, config.transport),
-            .tools = std.ArrayList(RegisteredTool){},
+            .tools = .{},
             .server_info = .{
                 .name = config.name,
                 .version = config.version,
             },
+            .capabilities = .{
+                .tools = .{ .listChanged = true },
+                .resources = null,
+            },
+            .client_capabilities = null,
             .security_guard = security.SecurityGuard.init(allocator),
             .initialized = false,
+            .runtime = runtime,
+            .io = io,
         };
     }
 
@@ -66,6 +93,7 @@ pub const Server = struct {
         self.tools.deinit(self.allocator);
         self.security_guard.deinit();
         self.transport.deinit();
+        self.runtime.deinit();
     }
 
     /// Register a tool handler
@@ -136,8 +164,45 @@ pub const Server = struct {
 
     /// Handle initialize request
     fn handleInitialize(self: *Self, request: protocol.Request) !void {
-        // TODO: Parse and validate initialize params
-        _ = request.params;
+        if (self.initialized) {
+            const error_response = protocol.Response{
+                .id = request.id,
+                .@"error" = .{
+                    .code = protocol.ErrorCodes.INVALID_REQUEST,
+                    .message = "Already initialized",
+                },
+            };
+            try self.transport.send(.{ .response = error_response });
+            return;
+        }
+
+        const params = request.params orelse {
+            const error_response = protocol.Response{
+                .id = request.id,
+                .@"error" = .{
+                    .code = protocol.ErrorCodes.INVALID_PARAMS,
+                    .message = "Missing parameters",
+                },
+            };
+            try self.transport.send(.{ .response = error_response });
+            return;
+        };
+
+        const init_params = json_ser.fromJsonValue(protocol.InitializeParams, self.allocator, params) catch {
+            const error_response = protocol.Response{
+                .id = request.id,
+                .@"error" = .{
+                    .code = protocol.ErrorCodes.INVALID_PARAMS,
+                    .message = "Invalid initialize parameters",
+                },
+            };
+            try self.transport.send(.{ .response = error_response });
+            return;
+        };
+
+        // Store client capabilities
+        self.client_capabilities = init_params.capabilities;
+        self.initialized = true;
 
         const result = protocol.InitializeResult{
             .protocolVersion = "2024-11-05",
@@ -148,13 +213,15 @@ pub const Server = struct {
             .serverInfo = self.server_info,
         };
 
+        const result_json = try json_ser.toJsonValue(self.allocator, result);
+        defer json_ser.freeJsonValue(self.allocator, result_json);
+
         const response = protocol.Response{
             .id = request.id,
-            .result = try self.valueFromStruct(result),
+            .result = result_json,
         };
 
         try self.transport.send(.{ .response = response });
-        self.initialized = true;
     }
 
     /// Handle tools/list request
@@ -171,7 +238,7 @@ pub const Server = struct {
             return;
         }
 
-        var tools_list = std.ArrayList(protocol.Tool){};
+        var tools_list: std.ArrayList(protocol.Tool) = .{};
         defer tools_list.deinit(self.allocator);
 
         for (self.tools.items) |registered_tool| {
@@ -182,17 +249,11 @@ pub const Server = struct {
             });
         }
 
-        const result = std.json.Value{ .object = blk: {
-            var obj = std.json.ObjectMap.init(self.allocator);
-            try obj.put("tools", .{ .array = blk2: {
-                var arr = std.json.Array.init(self.allocator);
-                for (tools_list.items) |tool| {
-                    try arr.append(try self.valueFromStruct(tool));
-                }
-                break :blk2 arr;
-            } });
-            break :blk obj;
-        } };
+        // Use proper JSON serialization
+        const result = try json_ser.toJsonValue(self.allocator, .{
+            .tools = tools_list.items,
+        });
+        defer json_ser.freeJsonValue(self.allocator, result);
 
         const response = protocol.Response{
             .id = request.id,
@@ -228,7 +289,7 @@ pub const Server = struct {
             return;
         };
 
-        const tool_call = self.structFromValue(protocol.ToolCall, params) catch {
+        const tool_call = json_ser.fromJsonValue(protocol.ToolCall, self.allocator, params) catch {
             const error_response = protocol.Response{
                 .id = request.id,
                 .@"error" = .{
@@ -243,7 +304,7 @@ pub const Server = struct {
         // Find the tool handler
         for (self.tools.items) |registered_tool| {
             if (std.mem.eql(u8, registered_tool.name, tool_call.name)) {
-                var ctx = ToolCtx.init(self.allocator, request.id, &self.security_guard);
+                var ctx = ToolCtx.init(self.allocator, request.id, &self.security_guard, self.io);
 
                 const result = registered_tool.handler(&ctx, tool_call.arguments orelse .null) catch |err| {
                     const error_response = protocol.Response{
@@ -257,9 +318,12 @@ pub const Server = struct {
                     return;
                 };
 
+                const result_json = try json_ser.toJsonValue(self.allocator, result);
+                defer json_ser.freeJsonValue(self.allocator, result_json);
+
                 const response = protocol.Response{
                     .id = request.id,
-                    .result = try self.valueFromStruct(result),
+                    .result = result_json,
                 };
 
                 try self.transport.send(.{ .response = response });
@@ -276,21 +340,6 @@ pub const Server = struct {
             },
         };
         try self.transport.send(.{ .response = error_response });
-    }
-
-    /// Helper to convert struct to JSON Value (simplified placeholder)
-    fn valueFromStruct(self: *Self, value: anytype) !std.json.Value {
-        _ = value;
-        // For now, return a simple placeholder value
-        return std.json.Value{ .object = std.json.ObjectMap.init(self.allocator) };
-    }
-
-    /// Helper to convert JSON Value to struct (simplified placeholder)
-    fn structFromValue(self: *Self, comptime T: type, value: std.json.Value) !T {
-        _ = self;
-        _ = value;
-        // For now, return a default-initialized struct
-        return std.mem.zeroes(T);
     }
 };
 

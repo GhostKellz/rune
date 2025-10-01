@@ -177,13 +177,7 @@ pub const SecurityGuard = struct {
     }
 
     /// Add an entry to the audit log
-    fn auditLog(
-        self: *SecurityGuard,
-        permission: Permission,
-        context: PermissionContext,
-        decision: PolicyDecision,
-        granted: bool
-    ) !void {
+    fn auditLog(self: *SecurityGuard, permission: Permission, context: PermissionContext, decision: PolicyDecision, granted: bool) !void {
         const entry = AuditEntry{
             .timestamp = std.time.timestamp(),
             .permission = permission,

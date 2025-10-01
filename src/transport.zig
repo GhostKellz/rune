@@ -252,16 +252,13 @@ pub const WebSocketTransport = struct {
         _ = std.base64.standard.Encoder.encode(&key_b64, &key_bytes);
 
         // Send HTTP request
-        const request = try std.fmt.allocPrint(self.allocator,
-            "GET {s} HTTP/1.1\r\n" ++
+        const request = try std.fmt.allocPrint(self.allocator, "GET {s} HTTP/1.1\r\n" ++
             "Host: {s}\r\n" ++
             "Upgrade: websocket\r\n" ++
             "Connection: Upgrade\r\n" ++
             "Sec-WebSocket-Key: {s}\r\n" ++
             "Sec-WebSocket-Version: 13\r\n" ++
-            "\r\n",
-            .{ path, host, key_b64 }
-        );
+            "\r\n", .{ path, host, key_b64 });
         defer self.allocator.free(request);
 
         _ = try stream.writeAll(request);
@@ -307,19 +304,19 @@ pub const WebSocketTransport = struct {
         } else if (payload.len < 65536) {
             frame[idx] = 0x80 | 126; // MASK=1, length=126
             idx += 1;
-            std.mem.writeInt(u16, frame[idx..idx+2], @as(u16, @intCast(payload.len)), .big);
+            std.mem.writeInt(u16, frame[idx .. idx + 2], @as(u16, @intCast(payload.len)), .big);
             idx += 2;
         } else {
             frame[idx] = 0x80 | 127; // MASK=1, length=127
             idx += 1;
-            std.mem.writeInt(u64, frame[idx..idx+8], payload.len, .big);
+            std.mem.writeInt(u64, frame[idx .. idx + 8], payload.len, .big);
             idx += 8;
         }
 
         // Masking key
         var mask_key: [4]u8 = undefined;
         std.crypto.random.bytes(&mask_key);
-        @memcpy(frame[idx..idx+4], &mask_key);
+        @memcpy(frame[idx .. idx + 4], &mask_key);
         idx += 4;
 
         // Masked payload

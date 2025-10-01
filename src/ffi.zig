@@ -270,7 +270,7 @@ export fn rune_execute_tool(
     // Find and execute tool
     for (context.server.tools.items) |tool| {
         if (std.mem.eql(u8, tool.name, tool_name)) {
-            var ctx = root.ToolCtx.init(context.allocator, .{ .null = {} }, &context.server.security_guard);
+            var ctx = root.ToolCtx.init(context.allocator, .{ .null = {} }, &context.server.security_guard, context.server.io);
             _ = tool.handler(&ctx, parsed_params.value) catch |err| {
                 std.log.err("Tool execution failed: {}", .{err});
                 return createErrorResult(context.allocator, .EXECUTION_FAILED, "Tool execution failed");
